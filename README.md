@@ -353,54 +353,84 @@ print("Output Feature Map:\n", output)
 
 
 **pgm 6**
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import models, datasets, transforms
+from sklearn.metrics import classification_report, confusion_matrix
+import numpy as np
 
 # 1. PREPROCESSING & DATA LOADING
-# We resize to 75x75 as per lab manual requirement
+# We resize to 75x75 as required by Inception V3
 transform = transforms.Compose([
-    transforms.Resize((75, 75)), 
+    transforms.Resize((299, 299)), 
     transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,)) # Normalize pixel values
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 
+# Load Training and Test sets (CIFAR-10 has 10 classes)
 train_set = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+test_set = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=32, shuffle=True)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=32, shuffle=False)
+
+class_names = train_set.classes # ['airplane', 'automobile', 'bird', ...]
 
 # 2. LOAD PRE-TRAINED GOOGLENET (Inception V3)
-# aux_logits=False simplifies the training loop for the exam
-model = models.inception_v3(weights='DEFAULT', aux_logits=False)
+model = models.inception_v3(weights=models.Inception_V3_Weights.DEFAULT, aux_logits=True)
 
-# 3. FREEZE BASE LAYERS
-# This ensures we only train the new layers we add
+# 3. FREEZE BASE LAYERS (Transfer Learning)
 for param in model.parameters():
     param.requires_grad = False
 
-# 4. REPLACE THE TOP LAYER (Transfer Learning)
-# Inception V3's final layer is called 'fc'. We change it to 10 classes.
+# 4. REPLACE THE TOP LAYER
+# Change final layer 'fc' to match CIFAR-10 (10 classes)
 num_features = model.fc.in_features
 model.fc = nn.Sequential(
     nn.Linear(num_features, 256),
     nn.ReLU(),
     nn.Dropout(0.3),
-    nn.Linear(256, 10) # 10 classes for CIFAR-10
+    nn.Linear(256, 10)
 )
 
 # 5. LOSS AND OPTIMIZER
 criterion = nn.CrossEntropyLoss()
-# Only optimize the parameters of the new 'fc' layer
 optimizer = optim.Adam(model.fc.parameters(), lr=0.001)
 
 # 6. TRAINING LOOP
-for epoch in range(5): # Manual suggests 10, but 5 is enough for demo
+print("Starting Training...")
+for epoch in range(5):
+    model.train()
     for images, labels in train_loader:
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-        
-        optimizer.zero_grad() # The "Exam Trio"
+        outputs, aux_outputs = model(images)
+        loss_main = criterion(outputs, labels)
+        loss_aux = criterion(aux_outputs, labels)
+        loss = loss_main + 0.4 * loss_aux
+
+        optimizer.zero_grad() # The "Trio"
         loss.backward()
         optimizer.step()
-    print(f"Epoch {epoch+1} Loss: {loss.item():.4f}")
+    print(f"Epoch {epoch+1} completed. Loss: {loss.item():.4f}")
+
+# 7. EVALUATION: METRICS
+print("\nGenerating Metrics...")
+model.eval() # Disable dropout for evaluation
+y_true = []
+y_pred = []
+
+with torch.no_grad(): # Disable gradients to save memory
+    for images, labels in test_loader:
+        outputs = model(images)
+        # Use argmax to find the predicted class
+        _, predicted = torch.max(outputs, 1)
+        
+        y_true.extend(labels.numpy())
+        y_pred.extend(predicted.numpy())
+
+# 8. PRINT PERFORMANCE REPORTS
+print("\n--- Classification Report ---")
+print(classification_report(y_true, y_pred, target_names=class_names))
+
+print("--- Confusion Matrix ---")
+print(confusion_matrix(y_true, y_pred))
