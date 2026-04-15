@@ -227,32 +227,41 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
+from sklearn.metrics import classification_report, confusion_matrix
+import numpy as np
 
-# 1. PREPROCESSING (Manual Step 3)
-# Normalize pixels to 0-1 and convert to tensors
+# 1. DATA PREPROCESSING
+# Convert images to tensors and normalize pixel values to 0-1 range
 transform = transforms.Compose([transforms.ToTensor()])
-train_set = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=64, shuffle=True)
 
-# 2. DEFINE CNN MODEL (Manual Step 4-8)
+# Load MNIST Training and Test datasets
+train_set = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+test_set = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+
+# DataLoaders for batch processing
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=64, shuffle=True)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=1000, shuffle=False)
+
+# 2. DEFINE CNN MODEL
 class SimpleCNN(nn.Module):
     def __init__(self):
         super().__init__()
         self.network = nn.Sequential(
-            # Conv layer 1: Input 1 channel, Output 32 features, Kernel size 3x3
+            # Layer 1: Convolution + ReLU + MaxPool
             nn.Conv2d(1, 32, kernel_size=3), 
-            nn.ReLU(),                       # Activation (Step 5)
-            nn.MaxPool2d(2, 2),              # Max Pooling (Step 6)
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
             
-            # Conv layer 2: Output 64 features
+            # Layer 2: Convolution + ReLU + MaxPool
             nn.Conv2d(32, 64, kernel_size=3),
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
             
-            nn.Flatten(),                    # Convert 2D to 1D (Step 7)
-            nn.Linear(64 * 5 * 5, 64),      # Dense layer
+            # Layer 3: Flatten + Dense layers
+            nn.Flatten(),
+            nn.Linear(64 * 5 * 5, 64),
             nn.ReLU(),
-            nn.Linear(64, 10)                # Output layer (10 digits)
+            nn.Linear(64, 10) # 10 output classes for digits 0-9
         )
 
     def forward(self, x):
@@ -260,22 +269,43 @@ class SimpleCNN(nn.Module):
 
 model = SimpleCNN()
 
-# 3. LOSS AND OPTIMIZER (Manual Step 9-10)
-# CrossEntropy handles Softmax automatically
+# 3. LOSS AND OPTIMIZER
 criterion = nn.CrossEntropyLoss() 
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-# 4. TRAINING LOOP (Manual Step 5 in Algorithm)
-for epoch in range(2): # 5 epochs as per manual, 2 for quick exam demo
+# 4. TRAINING LOOP
+print("Training started...")
+for epoch in range(2): # Shortened for exam; use 5 for better accuracy
     for images, labels in train_loader:
         outputs = model(images)
         loss = criterion(outputs, labels)
         
-        optimizer.zero_grad() # The Trio
-        loss.backward()
-        optimizer.step()
-    print(f"Epoch Finished. Loss: {loss.item():.4f}")
+        optimizer.zero_grad() # The "Trio": 1. Clear gradients
+        loss.backward()      # 2. Compute gradients
+        optimizer.step()     # 3. Update weights
+    print(f"Epoch {epoch+1} completed. Loss: {loss.item():.4f}")
 
+# 5. EVALUATION: CLASSIFICATION REPORT & CONFUSION MATRIX
+print("\nEvaluating model...")
+model.eval() # Set to evaluation mode
+y_true = []
+y_pred = []
+
+with torch.no_grad(): # Disable gradient calculation for testing
+    for images, labels in test_loader:
+        outputs = model(images)
+        # Use argmax to get the predicted digit class
+        _, predicted = torch.max(outputs, 1)
+        
+        y_true.extend(labels.numpy())
+        y_pred.extend(predicted.numpy())
+
+# Display Final Metrics
+print("\n--- Classification Report ---")
+print(classification_report(y_true, y_pred))
+
+print("--- Confusion Matrix ---")
+print(confusion_matrix(y_true, y_pred))
 
 
 
