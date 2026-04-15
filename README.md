@@ -156,32 +156,27 @@ with torch.no_grad():
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sklearn.metrics import classification_report, confusion_matrix
+import numpy as np
 
 # 1. SETUP DIMENSIONS (Based on manual Step 3 & 5)
-# MFCC features are flattened. If n_mfcc=13 and length=32, input is 13*32=416
 input_size = 416 
-num_classes = 5 # yes, no, up, down, left
+num_classes = 5 
+class_names = ["yes", "no", "up", "down", "left"] # Predefined categories [cite: 469]
 
-# 2. DEFINE THE DEEP NEURAL NETWORK (DNN)
+# 2. DEFINE THE DNN MODEL [cite: 490, 492, 495, 497]
 class SpeechDNN(nn.Module):
     def __init__(self):
         super(SpeechDNN, self).__init__()
         self.network = nn.Sequential(
-            # Layer 1: Dense(512) + ReLU + Dropout(0.3)
             nn.Linear(input_size, 512),
             nn.ReLU(),
             nn.Dropout(0.3),
-            
-            # Layer 2: Dense(256) + ReLU + Dropout(0.3)
             nn.Linear(512, 256),
             nn.ReLU(),
             nn.Dropout(0.3),
-            
-            # Layer 3: Dense(128) + ReLU
             nn.Linear(256, 128),
             nn.ReLU(),
-            
-            # Output Layer: 5 classes
             nn.Linear(128, num_classes) 
         )
 
@@ -189,33 +184,41 @@ class SpeechDNN(nn.Module):
         return self.network(x)
 
 model = SpeechDNN()
-
-# 3. LOSS AND OPTIMIZER (Step 6)
-# CrossEntropyLoss handles the Softmax calculation automatically
 criterion = nn.CrossEntropyLoss() 
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-# 4. TRAINING LOOP (Simplified for 20 Epochs)
-# Assume X_train and y_train are already prepared tensors
+# 3. TRAINING LOOP [cite: 504]
 for epoch in range(20):
-    # Forward pass
+    model.train()
     outputs = model(X_train)
     loss = criterion(outputs, y_train)
     
-    # Backward pass (The Exam Trio)
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    
-    if (epoch+1) % 5 == 0:
-        print(f"Epoch [{epoch+1}/20], Loss: {loss.item():.4f}")
 
-# 5. EVALUATION (Step 7)
-with torch.no_grad():
+# 4. EVALUATION: CONFUSION MATRIX & CLASSIFICATION REPORT [cite: 505, 515]
+model.eval() # Set model to evaluation mode
+y_true = []
+y_pred = []
+
+with torch.no_grad(): # Disable gradients for testing
     test_outputs = model(X_test)
+    # Use argmax to pick the command with highest probability 
     _, predicted = torch.max(test_outputs, 1)
-    # Predicted Class = argmax(y) as per manual Step 8
+    
+    # Store as NumPy for scikit-learn metrics [cite: 1823]
+    y_true.extend(y_test.numpy())
+    y_pred.extend(predicted.numpy())
 
+# 5. PRINT PERFORMANCE METRICS [cite: 518, 520]
+print("\n--- Speech Classification Report ---")
+# Precision, Recall, and F1-score for each command [cite: 518, 1652]
+print(classification_report(y_true, y_pred, target_names=class_names))
+
+print("--- Confusion Matrix ---")
+# A table showing which words were correctly or incorrectly predicted [cite: 520, 1869]
+print(confusion_matrix(y_true, y_pred))
 
 
 
