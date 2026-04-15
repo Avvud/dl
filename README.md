@@ -156,72 +156,90 @@ with torch.no_grad():
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.metrics import classification_report, confusion_matrix
 import numpy as np
+from sklearn.metrics import classification_report, confusion_matrix
 
-# 1. SETUP DIMENSIONS (Based on manual Step 3 & 5)
+# 1. SETUP PARAMETERS (Based on Lab Manual)
+# input_size 416 comes from 13 MFCC coefficients * 32 time-steps [cite: 1887, 1897]
 input_size = 416 
-num_classes = 5 
-class_names = ["yes", "no", "up", "down", "left"] # Predefined categories [cite: 469]
+num_classes = 5
+class_names = ["yes", "no", "up", "down", "left"] 
+# --- Note for Exam: In a real lab, you would load your MFCC tensors here ---
+# Creating dummy data so the code is runnable for your practice
+X_train = torch.randn(100, input_size) 
+y_train = torch.randint(0, num_classes, (100,))
+X_test = torch.randn(20, input_size)
+y_test = torch.randint(0, num_classes, (20,))
 
-# 2. DEFINE THE DNN MODEL [cite: 490, 492, 495, 497]
+# 2. DEFINE THE DNN ARCHITECTURE [cite: 1888, 1889]
 class SpeechDNN(nn.Module):
     def __init__(self):
         super(SpeechDNN, self).__init__()
         self.network = nn.Sequential(
+            # Layer 1: Dense(512) + ReLU + Dropout [cite: 1888]
             nn.Linear(input_size, 512),
             nn.ReLU(),
             nn.Dropout(0.3),
+            
+            # Layer 2: Dense(256) + ReLU + Dropout [cite: 1888]
             nn.Linear(512, 256),
             nn.ReLU(),
             nn.Dropout(0.3),
+            
+            # Layer 3: Dense(128) + ReLU [cite: 1889]
             nn.Linear(256, 128),
             nn.ReLU(),
-            nn.Linear(128, num_classes) 
+            
+            # Output Layer [cite: 1889]
+            nn.Linear(128, num_classes)
         )
 
     def forward(self, x):
         return self.network(x)
 
 model = SpeechDNN()
-criterion = nn.CrossEntropyLoss() 
+
+# 3. LOSS AND OPTIMIZER [cite: 1890]
+criterion = nn.CrossEntropyLoss() # Automatically handles Softmax
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-# 3. TRAINING LOOP [cite: 504]
+# 4. TRAINING LOOP (20 Epochs) [cite: 1890, 1901]
+print("Starting Training...")
 for epoch in range(20):
     model.train()
+    
+    # Forward pass
     outputs = model(X_train)
     loss = criterion(outputs, y_train)
     
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+    # Backward pass (The Exam Trio)
+    optimizer.zero_grad() # 1. Clear gradients
+    loss.backward()      # 2. Compute gradients
+    optimizer.step()     # 3. Update weights
+    
+    if (epoch+1) % 5 == 0:
+        print(f"Epoch [{epoch+1}/20], Loss: {loss.item():.4f}")
 
-# 4. EVALUATION: CONFUSION MATRIX & CLASSIFICATION REPORT [cite: 505, 515]
-model.eval() # Set model to evaluation mode
+# 5. EVALUATION: METRICS [cite: 1891, 1893, 1901]
+print("\nEvaluating Model...")
+model.eval()
 y_true = []
 y_pred = []
 
-with torch.no_grad(): # Disable gradients for testing
+with torch.no_grad():
     test_outputs = model(X_test)
-    # Use argmax to pick the command with highest probability 
+    # Pick class with highest probability score [cite: 1851, 1896, 1905]
     _, predicted = torch.max(test_outputs, 1)
     
-    # Store as NumPy for scikit-learn metrics [cite: 1823]
     y_true.extend(y_test.numpy())
     y_pred.extend(predicted.numpy())
 
-# 5. PRINT PERFORMANCE METRICS [cite: 518, 520]
-print("\n--- Speech Classification Report ---")
-# Precision, Recall, and F1-score for each command [cite: 518, 1652]
+# Final Results
+print("\n--- Classification Report ---")
 print(classification_report(y_true, y_pred, target_names=class_names))
 
 print("--- Confusion Matrix ---")
-# A table showing which words were correctly or incorrectly predicted [cite: 520, 1869]
-print(confusion_matrix(y_true, y_pred))
-
-
-
+print(confusion_matrix(y_true, y_pred)) 
 
 
 
